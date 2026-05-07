@@ -1,0 +1,42 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.TopoLift/topolift-mcp",
+  "title": "TopoLift Negotiation",
+  "description": "Atom-grounded negotiation reasoning. Typed topology slot, inline citations, public dialect.",
+  "version": "0.1.1",
+  "repository": {
+    "url": "https://github.com/TopoLift/topolift-mcp",
+    "source": "github",
+    "id": "1232008632"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "topolift-mcp",
+      "version": "0.1.1",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "TOPOLIFT_API_KEY",
+          "description": "Bearer key from topolift.ai (Stripe-provisioned). Required for topolift_negotiate; topolift_dialect works without it. Autonomous agents can pay per call via x402 directly against the API instead.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "TOPOLIFT_API_URL",
+          "description": "API base URL. Override only if pointing at a non-default deployment.",
+          "default": "https://api.topolift.ai"
+        },
+        {
+          "name": "TOPOLIFT_TIMEOUT",
+          "description": "Negotiate-call timeout in seconds. Default 600.",
+          "default": "600"
+        }
+      ]
+    }
+  ]
+}

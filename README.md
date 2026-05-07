@@ -2,6 +2,10 @@
 
 MCP server exposing **TopoLift's atom-grounded negotiation reasoning** to any MCP-capable agent — Claude Code, Cursor, OpenAI Agents SDK, etc.
 
+> Listed on the [official MCP Registry](https://registry.modelcontextprotocol.io/) as `io.github.TopoLift/topolift-mcp`.
+>
+> mcp-name: io.github.TopoLift/topolift-mcp
+
 ## What you get
 
 Two tools:
