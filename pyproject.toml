@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "topolift-mcp"
-version = "0.1.1"
+version = "0.2.0"
 description = "MCP server exposing TopoLift's atom-grounded negotiation reasoning to any MCP-compatible agent (Claude Code, Cursor, OpenAI Agents SDK, etc)."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -27,6 +27,7 @@ dependencies = [
     "mcp>=1.0",
     "httpx>=0.25",
     "pydantic>=2.0",
+    "uvicorn>=0.27",
 ]
 
 [project.urls]
@@ -36,6 +37,7 @@ Dialect = "https://api.topolift.ai/v1/dialect"
 
 [project.scripts]
 topolift-mcp = "topolift_mcp.server:main"
+topolift-mcp-http = "topolift_mcp.server:main_http"
 
 [tool.hatch.build.targets.wheel]
 packages = ["topolift_mcp"]

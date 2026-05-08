@@ -26,6 +26,7 @@ Configuration (env vars):
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import os
 import sys
@@ -39,6 +40,27 @@ logger = logging.getLogger("topolift.mcp")
 API_URL = os.environ.get("TOPOLIFT_API_URL", "https://api.topolift.ai").rstrip("/")
 API_KEY = os.environ.get("TOPOLIFT_API_KEY", "").strip()
 NEGOTIATE_TIMEOUT = float(os.environ.get("TOPOLIFT_TIMEOUT", "600"))
+
+# Per-request auth — only used in Streamable HTTP mode where each MCP request
+# carries its own Authorization header. The ASGI middleware below captures it
+# into this ContextVar so the tools can pick it up. In stdio mode this stays
+# empty and tools fall back to TOPOLIFT_API_KEY env var.
+_request_auth: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "topolift_request_auth", default=None
+)
+
+
+def _auth_header() -> Optional[str]:
+    """Return the Authorization header value for the outbound API call.
+
+    Order: per-request context (HTTP mode) → TOPOLIFT_API_KEY env var (stdio mode).
+    """
+    val = _request_auth.get()
+    if val:
+        return val
+    if API_KEY:
+        return f"Bearer {API_KEY}"
+    return None
 
 mcp = FastMCP(
     "topolift-negotiation",
@@ -145,11 +167,13 @@ def topolift_negotiate(
     Bearer key. Get one at https://topolift.ai or pay per call via x402
     directly against the API.
     """
-    if not API_KEY:
+    auth = _auth_header()
+    if not auth:
         raise RuntimeError(
-            "TOPOLIFT_API_KEY is not set. Set the env var to your TopoLift API "
-            "key (get one at https://topolift.ai), or call /v1/negotiate "
-            "directly with an x402 payment if you prefer pay-per-call."
+            "No authentication. In stdio mode, set TOPOLIFT_API_KEY env var. "
+            "In HTTP mode (mcp.topolift.ai), pass an Authorization: Bearer "
+            "tl-... header on the MCP request. Get a key at https://topolift.ai "
+            "or call /v1/negotiate directly with an x402 payment."
         )
 
     body: dict[str, Any] = {
@@ -187,7 +211,7 @@ def topolift_negotiate(
         resp = client.post(
             f"{API_URL}/v1/negotiate",
             headers={
-                "Authorization": f"Bearer {API_KEY}",
+                "Authorization": auth,
                 "Content-Type": "application/json",
             },
             json=body,
@@ -207,7 +231,7 @@ def topolift_negotiate(
 
 
 def main() -> None:
-    """Entry point for the topolift-mcp console script."""
+    """Entry point for the topolift-mcp console script (stdio transport)."""
     logging.basicConfig(level=os.environ.get("TOPOLIFT_LOG_LEVEL", "INFO"))
     if not API_KEY:
         # Don't refuse to start — `topolift_dialect` works without auth, and the
@@ -219,6 +243,69 @@ def main() -> None:
             file=sys.stderr,
         )
     mcp.run()
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Streamable HTTP variant — for hosted deployment at mcp.topolift.ai
+#
+# Each incoming MCP request can carry its own `Authorization: Bearer tl-...`
+# header. An ASGI middleware copies that header into the per-request context
+# so the topolift_negotiate tool forwards it to the API. This is the multi-
+# tenant model: the host doesn't know API keys; clients bring their own.
+# ────────────────────────────────────────────────────────────────────────────
+
+
+class _AuthCaptureMiddleware:
+    """Pure-ASGI middleware. Reads Authorization from each HTTP request and
+    sets the per-request ContextVar so the tool sees it. Resets on every
+    request so values don't leak between concurrent agents."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        token = None
+        for raw_name, raw_value in scope.get("headers", []):
+            if raw_name.lower() == b"authorization":
+                token = _request_auth.set(raw_value.decode("latin-1"))
+                break
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            if token is not None:
+                _request_auth.reset(token)
+
+
+def main_http() -> None:
+    """Entry point for the topolift-mcp-http console script (Streamable HTTP).
+
+    Listens on TOPOLIFT_MCP_HTTP_HOST:TOPOLIFT_MCP_HTTP_PORT (default
+    127.0.0.1:8401). Designed to run behind a reverse proxy (Caddy) at
+    mcp.topolift.ai. Each MCP request must carry its own
+    `Authorization: Bearer tl-...` header for negotiate calls; dialect calls
+    are unauthenticated.
+
+    Run directly:  topolift-mcp-http
+    Run with:      TOPOLIFT_MCP_HTTP_PORT=8401 topolift-mcp-http
+    """
+    import uvicorn
+
+    logging.basicConfig(level=os.environ.get("TOPOLIFT_LOG_LEVEL", "INFO"))
+
+    host = os.environ.get("TOPOLIFT_MCP_HTTP_HOST", "127.0.0.1")
+    port = int(os.environ.get("TOPOLIFT_MCP_HTTP_PORT", "8401"))
+
+    app = mcp.streamable_http_app()
+    app = _AuthCaptureMiddleware(app)
+
+    logger.info(
+        "Serving topolift-mcp Streamable HTTP on %s:%d (forwarding to %s)",
+        host, port, API_URL,
+    )
+    uvicorn.run(app, host=host, port=port, log_level="info")
 
 
 if __name__ == "__main__":

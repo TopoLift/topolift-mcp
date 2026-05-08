@@ -3,7 +3,7 @@
   "name": "io.github.TopoLift/topolift-mcp",
   "title": "TopoLift Negotiation",
   "description": "Atom-grounded negotiation reasoning. Typed topology slot, inline citations, public dialect.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "repository": {
     "url": "https://github.com/TopoLift/topolift-mcp",
     "source": "github",
@@ -14,7 +14,7 @@
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "topolift-mcp",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
