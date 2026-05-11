@@ -34,6 +34,7 @@ from typing import Any, Optional
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 logger = logging.getLogger("topolift.mcp")
 
@@ -62,6 +63,28 @@ def _auth_header() -> Optional[str]:
         return f"Bearer {API_KEY}"
     return None
 
+# DNS rebinding protection: FastMCP auto-enables a localhost-only allow-list
+# when host=127.0.0.1, which breaks deployments behind a TLS-terminating
+# reverse proxy on a public hostname. We allow the hosted public domain plus
+# the loopback addresses (for direct localhost testing). Additional public
+# hosts can be passed in via TOPOLIFT_MCP_ALLOWED_HOSTS (comma-separated).
+_extra_hosts = [
+    h.strip() for h in os.environ.get(
+        "TOPOLIFT_MCP_ALLOWED_HOSTS", "mcp.topolift.ai"
+    ).split(",") if h.strip()
+]
+_transport_security = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=[
+        "127.0.0.1:*", "localhost:*", "[::1]:*",
+        *_extra_hosts,
+    ],
+    allowed_origins=[
+        "http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*",
+        *(f"https://{h}" for h in _extra_hosts),
+    ],
+)
+
 mcp = FastMCP(
     "topolift-negotiation",
     instructions=(
@@ -71,6 +94,7 @@ mcp = FastMCP(
         "negotiate response with full structural fluency. Atoms stay server-side; "
         "what you receive is the structural reasoning that the topology produced."
     ),
+    transport_security=_transport_security,
 )
 
 
